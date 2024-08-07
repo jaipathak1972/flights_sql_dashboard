@@ -1,6 +1,6 @@
 import streamlit as st
-import mysql.connector
-import bcrypt
+from user_register import UserRegister
+from dbhealper import create_bar_graph, create_line_graph, create_pie_chart, create_boxplot_graph
 
 # Define custom CSS
 css = """
@@ -67,81 +67,54 @@ header {
 # Apply the custom CSS
 st.markdown(css, unsafe_allow_html=True)
 
-# Database connection configuration
-db_config = {
-    'user': 'root',
-    'password': 'jaipathak2005',
-    'host': 'localhost',
-    'database': 'user_auth'
-}
-
-def create_connection():
-    try:
-        return mysql.connector.connect(**db_config)
-    except mysql.connector.Error as err:
-        st.error(f"Database connection error: {err}")
-        return None
-
-# Register user function
-def register_user(username, password):
-    conn = create_connection()
-    if conn is None:
-        return
-    cursor = conn.cursor()
-
-    # Hash the password
-    hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
-
-    try:
-        # Insert the user into the database
-        cursor.execute("INSERT INTO users (username, password) VALUES (%s, %s)", (username, hashed_password.decode('utf-8')))
-        conn.commit()
-        st.success("User registered successfully!")
-    except mysql.connector.Error as err:
-        st.error(f"Error: {err}")
-    finally:
-        cursor.close()
-        conn.close()
-
-# Login user function
-def login_user(username, password):
-    conn = create_connection()
-    if conn is None:
-        return
-    cursor = conn.cursor()
-
-    try:
-        # Retrieve the user from the database
-        cursor.execute("SELECT password FROM users WHERE username = %s", (username,))
-        result = cursor.fetchone()
-
-        if result and bcrypt.checkpw(password.encode('utf-8'), result[0].encode('utf-8')):
-            st.session_state.logged_in = True
-            st.session_state.username = username
-            st.success("Logged in successfully!")
-        else:
-            st.error("Invalid username or password!")
-    finally:
-        cursor.close()
-        conn.close()
+# Initialize UserRegister class
+user_register = UserRegister()
 
 # Initialize session state if not already done
-def main_dashboard(name):
-    st.title(f'Welcome {name} to the Health Care Dashboard')
-    st.write("Here is your dashboard content...")
-
-
 if 'selected_tab' not in st.session_state:
     st.session_state.selected_tab = "Tab 1"
-    
+
 def set_tab(tab_name):
     st.session_state.selected_tab = tab_name
 
-# Initialize session state if not already done
 if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
 if 'username' not in st.session_state:
     st.session_state.username = None
+
+def main_dashboard(name):
+    st.title(f'Welcome {name} to the Health Care Dashboard')
+    st.write("Fetching data from heartattack database...")
+
+    table_name = 'heartattack.heart_attack'
+
+    st.write("Generating Bar Graph...")
+    bar_fig = create_bar_graph(table_name)
+    if bar_fig:
+        st.plotly_chart(bar_fig, use_container_width=True)
+    else:
+        st.write("No data available for bar graph.")
+
+    st.write("Generating Line Graph...")
+    line_fig = create_line_graph(table_name)
+    if line_fig:
+        st.plotly_chart(line_fig, use_container_width=True)
+    else:
+        st.write("No data available for line graph.")
+
+    st.write("Generating Pie Chart...")
+    pie_fig = create_pie_chart(table_name)
+    if pie_fig:
+        st.plotly_chart(pie_fig, use_container_width=True)
+    else:
+        st.write("No data available for pie chart.")
+
+    st.write("Generating Box Plot...")
+    boxplot_fig = create_boxplot_graph(table_name)
+    if boxplot_fig:
+        st.plotly_chart(boxplot_fig, use_container_width=True)
+    else:
+        st.write("No data available for box plot.")
 
 # UI Logic
 if st.session_state.logged_in:
@@ -160,8 +133,12 @@ else:
         login_password = st.text_input("Password", type="password")
         if st.button("Login"):
             if login_username and login_password:
-                login_user(login_username, login_password)
-                st.experimental_rerun()  # Refresh the app state
+                if user_register.login_user(login_username, login_password):
+                    st.session_state.logged_in = True
+                    st.session_state.username = login_username
+                    st.experimental_rerun()  # Refresh the app state
+                else:
+                    st.error("Invalid username or password.")
             else:
                 st.error("Please enter a username and password.")
 
@@ -171,9 +148,8 @@ else:
         new_password = st.text_input("New Password", type="password")
         if st.button("Register"):
             if new_username and new_password:
-                register_user(new_username, new_password)
+                user_register.register_user(new_username, new_password)
+                st.success("Registration successful!")
                 st.experimental_rerun()  # Refresh the app state
-
-
             else:
                 st.error("Please enter a username and password.")
